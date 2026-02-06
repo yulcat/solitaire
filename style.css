@@ -161,6 +161,73 @@ html, body {
   background: var(--bg-dark);
 }
 
+/* === Stats Overlay === */
+#stats-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--win-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.3s ease;
+}
+
+#stats-overlay.hidden {
+  display: none;
+}
+
+#stats-dialog {
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px 40px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  min-width: 280px;
+}
+
+#stats-dialog h2 {
+  font-size: 24px;
+  margin-bottom: 16px;
+}
+
+#stats-content {
+  text-align: left;
+  margin-bottom: 20px;
+  line-height: 1.8;
+  font-size: 15px;
+}
+
+#stats-content .stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid #eee;
+}
+
+#stats-content .stat-label {
+  color: #666;
+}
+
+#stats-content .stat-value {
+  font-weight: bold;
+  color: #222;
+}
+
+#btn-close-stats {
+  background: #555;
+  color: #fff;
+  border: none;
+  font-size: 16px;
+  padding: 10px 28px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#btn-close-stats:hover {
+  background: #333;
+}
+
 /* === Mobile Adjustments === */
 @media (max-width: 480px) {
   #toolbar {

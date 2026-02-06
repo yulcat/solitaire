@@ -6,6 +6,10 @@
   <title>🃏 솔리테어</title>
   <link rel="stylesheet" href="style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0e3d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
   <div id="app">
@@ -13,6 +17,7 @@
       <button id="btn-new" title="새 게임">🔄 새 게임</button>
       <button id="btn-undo" title="되돌리기" disabled>↩️ 되돌리기</button>
       <button id="btn-auto" title="오토플레이">🤖 오토플레이</button>
+      <button id="btn-stats" title="통계">📊</button>
       <div id="move-counter">이동: <span id="moves">0</span></div>
       <div id="timer">시간: <span id="time">0:00</span></div>
     </header>
@@ -23,6 +28,13 @@
       <h1>🎉 축하합니다!</h1>
       <p>이동 <span id="win-moves">0</span>회 · <span id="win-time">0:00</span></p>
       <button id="btn-new-game">새 게임 시작</button>
+    </div>
+  </div>
+  <div id="stats-overlay" class="hidden">
+    <div id="stats-dialog">
+      <h2>📊 통계</h2>
+      <div id="stats-content"></div>
+      <button id="btn-close-stats">닫기</button>
     </div>
   </div>
   <script src="game.js" type="module"></script>

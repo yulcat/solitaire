@@ -1076,11 +1076,13 @@ class UIController {
     this.autoPlayInterval = null;
     this.drawAttempts = 0;
     this.maxDrawAttempts = 0;
+    this.stats = new StatsManager();
 
     // Buttons
     this.btnNew = document.getElementById('btn-new');
     this.btnUndo = document.getElementById('btn-undo');
     this.btnAuto = document.getElementById('btn-auto');
+    this.btnStats = document.getElementById('btn-stats');
     this.movesEl = document.getElementById('moves');
     this.timeEl = document.getElementById('time');
     this.btnNewGame = document.getElementById('btn-new-game');
@@ -1088,17 +1090,26 @@ class UIController {
     this.btnNew.addEventListener('click', () => this.newGame());
     this.btnUndo.addEventListener('click', () => this.undo());
     this.btnAuto.addEventListener('click', () => this.toggleAutoPlay());
+    this.btnStats.addEventListener('click', () => this.showStats());
     this.btnNewGame.addEventListener('click', () => {
       document.getElementById('win-overlay').classList.add('hidden');
       this.newGame();
+    });
+    document.getElementById('btn-close-stats').addEventListener('click', () => {
+      document.getElementById('stats-overlay').classList.add('hidden');
     });
 
     this.startTimer();
   }
 
   newGame() {
+    // Record previous game as loss if it wasn't won
+    if (this.game.startTime && !this.game.won && this.game.moves > 0) {
+      this.stats.recordLoss();
+    }
     this.stopAutoPlay();
     this.game.newGame();
+    this.stats.recordGame();
     this.renderer.render();
     this.updateButtons();
     this.startTimer();
@@ -1239,10 +1250,96 @@ class UIController {
     if (this.game.won) {
       this.game.elapsed = Math.floor((Date.now() - this.game.startTime) / 1000);
       this.stopAutoPlay();
+      this.stats.recordWin(this.game.elapsed, this.game.moves);
       document.getElementById('win-moves').textContent = this.game.moves;
       document.getElementById('win-time').textContent = this.game.getElapsedTime();
       document.getElementById('win-overlay').classList.remove('hidden');
     }
+  }
+
+  showStats() {
+    document.getElementById('stats-content').innerHTML = this.stats.getHTML();
+    document.getElementById('stats-overlay').classList.remove('hidden');
+  }
+}
+
+
+// ============================================================
+// 📊 Stats Manager
+// ============================================================
+
+class StatsManager {
+  constructor() {
+    this.stats = this.load();
+  }
+
+  load() {
+    try {
+      const data = localStorage.getItem('solitaire-stats');
+      if (data) return JSON.parse(data);
+    } catch (e) {}
+    return {
+      gamesPlayed: 0,
+      gamesWon: 0,
+      bestTime: null,
+      bestMoves: null,
+      currentStreak: 0,
+      bestStreak: 0,
+    };
+  }
+
+  save() {
+    localStorage.setItem('solitaire-stats', JSON.stringify(this.stats));
+  }
+
+  recordWin(time, moves) {
+    this.stats.gamesWon++;
+    this.stats.currentStreak++;
+    if (this.stats.currentStreak > this.stats.bestStreak) {
+      this.stats.bestStreak = this.stats.currentStreak;
+    }
+    if (this.stats.bestTime === null || time < this.stats.bestTime) {
+      this.stats.bestTime = time;
+    }
+    if (this.stats.bestMoves === null || moves < this.stats.bestMoves) {
+      this.stats.bestMoves = moves;
+    }
+    this.save();
+  }
+
+  recordGame() {
+    this.stats.gamesPlayed++;
+    this.save();
+  }
+
+  recordLoss() {
+    this.stats.currentStreak = 0;
+    this.save();
+  }
+
+  getWinRate() {
+    if (this.stats.gamesPlayed === 0) return 0;
+    return Math.round((this.stats.gamesWon / this.stats.gamesPlayed) * 100);
+  }
+
+  formatTime(seconds) {
+    if (seconds === null) return '-';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  getHTML() {
+    const s = this.stats;
+    return `
+      <div class="stat-row"><span class="stat-label">게임 수</span><span class="stat-value">${s.gamesPlayed}</span></div>
+      <div class="stat-row"><span class="stat-label">승리</span><span class="stat-value">${s.gamesWon}</span></div>
+      <div class="stat-row"><span class="stat-label">승률</span><span class="stat-value">${this.getWinRate()}%</span></div>
+      <div class="stat-row"><span class="stat-label">연승</span><span class="stat-value">${s.currentStreak}</span></div>
+      <div class="stat-row"><span class="stat-label">최고 연승</span><span class="stat-value">${s.bestStreak}</span></div>
+      <div class="stat-row"><span class="stat-label">최단 시간</span><span class="stat-value">${this.formatTime(s.bestTime)}</span></div>
+      <div class="stat-row"><span class="stat-label">최소 이동</span><span class="stat-value">${s.bestMoves ?? '-'}</span></div>
+    `;
   }
 }
 
