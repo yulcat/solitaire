@@ -1069,9 +1069,10 @@ class InputHandler {
 // ============================================================
 
 class UIController {
-  constructor(game, renderer) {
+  constructor(game, renderer, winAnim) {
     this.game = game;
     this.renderer = renderer;
+    this.winAnim = winAnim;
     this.timerInterval = null;
     this.autoPlayInterval = null;
     this.drawAttempts = 0;
@@ -1108,6 +1109,7 @@ class UIController {
       this.stats.recordLoss();
     }
     this.stopAutoPlay();
+    if (this.winAnim) this.winAnim.stop();
     this.game.newGame();
     this.stats.recordGame();
     this.renderer.render();
@@ -1251,15 +1253,143 @@ class UIController {
       this.game.elapsed = Math.floor((Date.now() - this.game.startTime) / 1000);
       this.stopAutoPlay();
       this.stats.recordWin(this.game.elapsed, this.game.moves);
-      document.getElementById('win-moves').textContent = this.game.moves;
-      document.getElementById('win-time').textContent = this.game.getElapsedTime();
-      document.getElementById('win-overlay').classList.remove('hidden');
+
+      // Start cascading card animation
+      if (this.winAnim) {
+        this.winAnim.start();
+      }
+
+      // Show win dialog after a short delay (let animation play)
+      setTimeout(() => {
+        document.getElementById('win-moves').textContent = this.game.moves;
+        document.getElementById('win-time').textContent = this.game.getElapsedTime();
+        document.getElementById('win-overlay').classList.remove('hidden');
+      }, 2000);
     }
   }
 
   showStats() {
     document.getElementById('stats-content').innerHTML = this.stats.getHTML();
     document.getElementById('stats-overlay').classList.remove('hidden');
+  }
+}
+
+
+// ============================================================
+// 🎆 Win Animation (Cascading Cards)
+// ============================================================
+
+class WinAnimation {
+  constructor(renderer) {
+    this.renderer = renderer;
+    this.particles = [];
+    this.running = false;
+    this.animFrame = null;
+  }
+
+  start() {
+    this.particles = [];
+    this.running = true;
+
+    // Create falling cards from foundations
+    const foundations = this.renderer.game.foundations;
+    let delay = 0;
+    for (let f = 0; f < 4; f++) {
+      const cards = [...foundations[f]].reverse();
+      for (let i = 0; i < cards.length; i++) {
+        const card = cards[i];
+        const x = this.renderer.getColX(f + 3);
+        const y = this.renderer.topRowY;
+        this.particles.push({
+          card,
+          x, y,
+          vx: (Math.random() - 0.5) * 8,
+          vy: -Math.random() * 6 - 2,
+          gravity: 0.25,
+          bounce: 0.7,
+          delay: delay,
+          alpha: 1,
+        });
+        delay += 60;
+      }
+    }
+
+    this.lastTime = performance.now();
+    this.animate();
+  }
+
+  stop() {
+    this.running = false;
+    if (this.animFrame) {
+      cancelAnimationFrame(this.animFrame);
+      this.animFrame = null;
+    }
+    this.particles = [];
+  }
+
+  animate() {
+    if (!this.running) return;
+
+    const now = performance.now();
+    const dt = Math.min(now - this.lastTime, 32) / 16; // normalize to ~60fps
+    this.lastTime = now;
+
+    const ctx = this.renderer.ctx;
+    const height = this.renderer.height;
+    const cardH = this.renderer.cardH;
+
+    // Draw green background
+    const grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, '#1a7a35');
+    grad.addColorStop(1, '#145524');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, this.renderer.width, height);
+
+    let active = 0;
+    for (const p of this.particles) {
+      if (p.delay > 0) {
+        p.delay -= dt * 16;
+        active++;
+        continue;
+      }
+
+      // Physics
+      p.vy += p.gravity * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      // Bounce off bottom
+      if (p.y + cardH > height) {
+        p.y = height - cardH;
+        p.vy = -Math.abs(p.vy) * p.bounce;
+        p.bounce *= 0.9;
+        // Leave a trail card
+        if (Math.abs(p.vy) > 1) {
+          active++;
+        }
+      }
+
+      // Bounce off sides
+      if (p.x < 0) { p.x = 0; p.vx = Math.abs(p.vx); }
+      if (p.x + this.renderer.cardW > this.renderer.width) {
+        p.x = this.renderer.width - this.renderer.cardW;
+        p.vx = -Math.abs(p.vx);
+      }
+
+      if (p.y < height + 100) {
+        active++;
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        this.renderer.drawCardFace(ctx, p.card, p.x, p.y);
+        ctx.restore();
+      }
+    }
+
+    if (active > 0) {
+      this.animFrame = requestAnimationFrame(() => this.animate());
+    } else {
+      this.running = false;
+    }
   }
 }
 
@@ -1351,7 +1481,8 @@ class StatsManager {
 const game = new SolitaireGame();
 const canvas = document.getElementById('game-canvas');
 const renderer = new SolitaireRenderer(canvas, game);
-const ui = new UIController(game, renderer);
+const winAnim = new WinAnimation(renderer);
+const ui = new UIController(game, renderer, winAnim);
 const input = new InputHandler(renderer, game, ui);
 
 // Start game
