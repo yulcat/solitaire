@@ -591,10 +591,59 @@ class SolitaireRenderer {
     // Draw tableau
     this.drawTableau(ctx);
 
+    // Draw drop highlights
+    if (this.dragging) {
+      this.drawDropHighlights(ctx);
+    }
+
     // Draw dragged cards on top
     if (this.dragging) {
       this.drawDraggedCards(ctx);
     }
+  }
+
+  drawDropHighlights(ctx) {
+    if (!this.dragging) return;
+    const { cards, source } = this.dragging;
+    const card = cards[0];
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(244, 197, 66, 0.6)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6, 4]);
+
+    // Check tableau columns
+    for (let c = 0; c < 7; c++) {
+      if (source.type === 'tableau' && source.colIdx === c) continue;
+      const col = this.game.tableau[c];
+      const topCard = col.length > 0 ? col[col.length - 1] : null;
+      if (card.canStackOnTableau(topCard)) {
+        const x = this.getColX(c);
+        let y = this.tabY;
+        if (col.length > 0) {
+          for (let i = 0; i < col.length; i++) {
+            y += col[i].faceUp ? this.tabFaceUpStep : this.tabFaceDownStep;
+          }
+        }
+        this.roundRect(ctx, x, y, this.cardW, this.cardH, this.radius);
+        ctx.stroke();
+      }
+    }
+
+    // Check foundations (single card only)
+    if (cards.length === 1) {
+      for (let f = 0; f < 4; f++) {
+        const found = this.game.foundations[f];
+        const topCard = found.length > 0 ? found[found.length - 1] : null;
+        if (card.canStackOnFoundation(topCard)) {
+          const x = this.getColX(f + 3);
+          this.roundRect(ctx, x, this.topRowY, this.cardW, this.cardH, this.radius);
+          ctx.stroke();
+        }
+      }
+    }
+
+    ctx.restore();
   }
 
   drawStock(ctx) {
@@ -916,6 +965,11 @@ class InputHandler {
     this.pointerDown = false;
     this.renderer.render();
     this.ui.updateButtons();
+
+    // Auto-finish: if all cards face up and stock empty, auto-complete
+    if (!this.game.won && !this.game.autoPlaying && this.game.allFaceUp() && this.game.stock.length === 0 && this.game.waste.length === 0) {
+      this.ui.startAutoFinish();
+    }
   }
 
   handleTap(x, y) {
@@ -1114,6 +1168,56 @@ class UIController {
       clearInterval(this.autoPlayInterval);
       this.autoPlayInterval = null;
     }
+  }
+
+  startAutoFinish() {
+    // Rapidly move all remaining cards to foundations
+    this.game.autoPlaying = true;
+    this.btnAuto.classList.add('running');
+    this.btnAuto.textContent = '⏸️ 정리 중...';
+
+    const finishInterval = setInterval(() => {
+      if (this.game.won) {
+        clearInterval(finishInterval);
+        this.stopAutoPlay();
+        this.checkWin();
+        return;
+      }
+
+      // Find any card that can go to foundation
+      let moved = false;
+      for (let c = 0; c < 7; c++) {
+        const col = this.game.tableau[c];
+        if (col.length === 0) continue;
+        const card = col[col.length - 1];
+        if (!card.faceUp) continue;
+        for (let f = 0; f < 4; f++) {
+          if (this.game.moveTableauToFoundation(c, f)) {
+            moved = true;
+            break;
+          }
+        }
+        if (moved) break;
+      }
+
+      if (!moved) {
+        // Try waste
+        for (let f = 0; f < 4; f++) {
+          if (this.game.moveWasteToFoundation(f)) {
+            moved = true;
+            break;
+          }
+        }
+      }
+
+      this.renderer.render();
+      this.updateButtons();
+
+      if (!moved) {
+        clearInterval(finishInterval);
+        this.stopAutoPlay();
+      }
+    }, 80); // Fast finish animation
   }
 
   startTimer() {
