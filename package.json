@@ -1,0 +1,9 @@
+{
+  "name": "solitaire",
+  "version": "1.0.0",
+  "description": "클론다이크 솔리테어 - 모바일 웹 게임",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

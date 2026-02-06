@@ -1,0 +1,184 @@
+/* === Reset & Base === */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1a6b30;
+  --bg-dark: #145524;
+  --toolbar-bg: #0e3d1a;
+  --toolbar-height: 48px;
+  --card-white: #fff;
+  --card-shadow: rgba(0,0,0,0.3);
+  --accent: #f4c542;
+  --win-bg: rgba(0,0,0,0.75);
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* === Toolbar === */
+#toolbar {
+  height: var(--toolbar-height);
+  background: var(--toolbar-bg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+#toolbar button {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+#toolbar button:hover {
+  background: rgba(255,255,255,0.25);
+}
+
+#toolbar button:active {
+  background: rgba(255,255,255,0.35);
+}
+
+#toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#toolbar button:disabled:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+#btn-auto {
+  background: rgba(244,197,66,0.3) !important;
+  color: var(--accent);
+}
+
+#btn-auto:hover {
+  background: rgba(244,197,66,0.45) !important;
+}
+
+#btn-auto.running {
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+#move-counter, #timer {
+  color: rgba(255,255,255,0.8);
+  font-size: 13px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+#move-counter { margin-left: auto; }
+#timer { margin-left: 12px; }
+
+/* === Canvas === */
+#game-canvas {
+  flex: 1;
+  width: 100%;
+  display: block;
+  cursor: pointer;
+}
+
+/* === Win Overlay === */
+#win-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--win-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.3s ease;
+}
+
+#win-overlay.hidden {
+  display: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#win-dialog {
+  background: #fff;
+  border-radius: 16px;
+  padding: 40px 48px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+#win-dialog h1 {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+#win-dialog p {
+  font-size: 18px;
+  color: #555;
+  margin-bottom: 24px;
+}
+
+#btn-new-game {
+  background: var(--bg);
+  color: #fff;
+  border: none;
+  font-size: 18px;
+  padding: 12px 32px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+#btn-new-game:hover {
+  background: var(--bg-dark);
+}
+
+/* === Mobile Adjustments === */
+@media (max-width: 480px) {
+  #toolbar {
+    height: 40px;
+    gap: 4px;
+    padding: 0 6px;
+  }
+  #toolbar button {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  #move-counter, #timer {
+    font-size: 11px;
+  }
+  #win-dialog {
+    padding: 28px 24px;
+  }
+  #win-dialog h1 {
+    font-size: 24px;
+  }
+}
