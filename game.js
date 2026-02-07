@@ -5,6 +5,7 @@
 // === Constants ===
 const SUITS = ['♠', '♥', '♦', '♣'];
 const SUIT_COLORS = { '♠': 'black', '♣': 'black', '♥': 'red', '♦': 'red' };
+const SUIT_RENDER_COLORS = { '♠': '#1a1a3e', '♣': '#222222', '♥': '#d32f2f', '♦': '#e65100' };
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const RANK_VALUES = {};
 RANKS.forEach((r, i) => RANK_VALUES[r] = i + 1);
@@ -512,9 +513,12 @@ class SolitaireRenderer {
       return { type: 'stock' };
     }
 
-    // Waste pile (col 1, top row)
+    // Waste pile (col 1, top row) - account for fanned cards
     const wasteX = this.getColX(1);
-    if (x >= wasteX && x <= wasteX + this.cardW && y >= this.topRowY && y <= this.topRowY + this.cardH) {
+    const wasteVisCount = Math.min(this.game.waste.length, 3);
+    const wasteFanOffset = this.cardW * 0.22;
+    const wasteEndX = wasteX + (wasteVisCount > 0 ? (wasteVisCount - 1) * wasteFanOffset : 0) + this.cardW;
+    if (x >= wasteX && x <= wasteEndX && y >= this.topRowY && y <= this.topRowY + this.cardH) {
       return { type: 'waste' };
     }
 
@@ -674,9 +678,20 @@ class SolitaireRenderer {
     const y = this.topRowY;
 
     if (this.game.waste.length > 0) {
-      const card = this.game.waste[this.game.waste.length - 1];
-      if (!(this.dragging && this.dragging.source.type === 'waste')) {
-        this.drawCardFace(ctx, card, x, y);
+      const isDraggingWaste = this.dragging && this.dragging.source.type === 'waste';
+      // Show up to 3 cards fanned out to the right
+      const wasteLen = this.game.waste.length;
+      const visibleCount = Math.min(wasteLen, 3);
+      const fanOffset = this.cardW * 0.22;
+
+      // If dragging the top waste card, show one less
+      const showCount = isDraggingWaste ? visibleCount - 1 : visibleCount;
+      const startIdx = wasteLen - visibleCount;
+
+      for (let i = 0; i < showCount; i++) {
+        const card = this.game.waste[startIdx + i];
+        const offsetX = i * fanOffset;
+        this.drawCardFace(ctx, card, x + offsetX, y);
       }
     } else {
       this.drawEmptySlot(ctx, x, y);
@@ -815,11 +830,11 @@ class SolitaireRenderer {
     this.roundRect(ctx, x, y, this.cardW, this.cardH, this.radius);
     ctx.stroke();
 
-    // Text color
-    ctx.fillStyle = card.isRed() ? '#d32f2f' : '#222';
+    // Per-suit color for better distinction
+    ctx.fillStyle = SUIT_RENDER_COLORS[card.suit];
 
-    const fontSize = Math.max(11, this.cardW * 0.2);
-    const suitFontSize = Math.max(10, this.cardW * 0.18);
+    const fontSize = Math.max(12, this.cardW * 0.22);
+    const suitFontSize = Math.max(12, this.cardW * 0.22);
 
     // Top-left rank + suit
     ctx.font = `bold ${fontSize}px 'Segoe UI', sans-serif`;
@@ -839,8 +854,8 @@ class SolitaireRenderer {
     ctx.fillText(card.suit, 0, fontSize + suitFontSize);
     ctx.restore();
 
-    // Center suit (large)
-    const centerSize = Math.max(20, this.cardW * 0.4);
+    // Center suit (larger for visibility)
+    const centerSize = Math.max(24, this.cardW * 0.5);
     ctx.font = `${centerSize}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -925,11 +940,14 @@ class InputHandler {
     } else if (area.type === 'waste' && this.game.waste.length > 0) {
       const wasteX = this.renderer.getColX(1);
       const wasteY = this.renderer.topRowY;
+      const visibleCount = Math.min(this.game.waste.length, 3);
+      const fanOffset = this.renderer.cardW * 0.22;
+      const topCardX = wasteX + (visibleCount - 1) * fanOffset;
       const card = this.game.waste[this.game.waste.length - 1];
       this.renderer.dragging = {
         cards: [card],
         source: { type: 'waste' },
-        offsetX: x - wasteX,
+        offsetX: x - topCardX,
         offsetY: y - wasteY,
         x, y
       };
@@ -1037,23 +1055,68 @@ class InputHandler {
     const drag = this.renderer.dragging;
     if (!drag) return;
 
-    const dropArea = this.renderer.getAreaAt(x, y);
-    let moved = false;
+    // Calculate the center of the dragged card
+    const dragCenterX = x - drag.offsetX + this.renderer.cardW / 2;
+    const dragCenterY = y - drag.offsetY + this.renderer.cardH / 2;
+    const card = drag.cards[0];
 
-    if (dropArea) {
-      if (drag.source.type === 'waste') {
-        if (dropArea.type === 'foundation') {
-          moved = this.game.moveWasteToFoundation(dropArea.index);
-        } else if (dropArea.type === 'tableau' || dropArea.type === 'tableau-empty') {
-          moved = this.game.moveWasteToTableau(dropArea.colIdx);
-        }
-      } else if (drag.source.type === 'tableau') {
-        if (dropArea.type === 'foundation' && drag.cards.length === 1) {
-          moved = this.game.moveTableauToFoundation(drag.source.colIdx, dropArea.index);
-        } else if ((dropArea.type === 'tableau' || dropArea.type === 'tableau-empty') && dropArea.colIdx !== drag.source.colIdx) {
-          moved = this.game.moveTableauToTableau(drag.source.colIdx, dropArea.colIdx, drag.source.cardIndex);
+    // Build list of candidate destinations with distances
+    const candidates = [];
+
+    // Check foundations (single card only)
+    if (drag.cards.length === 1) {
+      for (let f = 0; f < 4; f++) {
+        const found = this.game.foundations[f];
+        const topCard = found.length > 0 ? found[found.length - 1] : null;
+        if (card.canStackOnFoundation(topCard)) {
+          const fx = this.renderer.getColX(f + 3) + this.renderer.cardW / 2;
+          const fy = this.renderer.topRowY + this.renderer.cardH / 2;
+          const dist = Math.hypot(dragCenterX - fx, dragCenterY - fy);
+          candidates.push({ dist, type: 'foundation', index: f });
         }
       }
+    }
+
+    // Check tableau columns
+    for (let c = 0; c < 7; c++) {
+      if (drag.source.type === 'tableau' && drag.source.colIdx === c) continue;
+      const col = this.game.tableau[c];
+      const topCard = col.length > 0 ? col[col.length - 1] : null;
+      if (card.canStackOnTableau(topCard)) {
+        const tx = this.renderer.getColX(c) + this.renderer.cardW / 2;
+        let ty = this.renderer.tabY;
+        if (col.length > 0) {
+          for (let i = 0; i < col.length; i++) {
+            ty += col[i].faceUp ? this.renderer.tabFaceUpStep : this.renderer.tabFaceDownStep;
+          }
+        }
+        ty += this.renderer.cardH / 2;
+        const dist = Math.hypot(dragCenterX - tx, dragCenterY - ty);
+        candidates.push({ dist, type: 'tableau', colIdx: c });
+      }
+    }
+
+    // Sort by distance and pick the closest within a generous range (1.5x card diagonal)
+    const maxDist = Math.hypot(this.renderer.cardW, this.renderer.cardH) * 1.5;
+    candidates.sort((a, b) => a.dist - b.dist);
+
+    let moved = false;
+    for (const cand of candidates) {
+      if (cand.dist > maxDist) break;
+      if (cand.type === 'foundation') {
+        if (drag.source.type === 'waste') {
+          moved = this.game.moveWasteToFoundation(cand.index);
+        } else if (drag.source.type === 'tableau') {
+          moved = this.game.moveTableauToFoundation(drag.source.colIdx, cand.index);
+        }
+      } else if (cand.type === 'tableau') {
+        if (drag.source.type === 'waste') {
+          moved = this.game.moveWasteToTableau(cand.colIdx);
+        } else if (drag.source.type === 'tableau') {
+          moved = this.game.moveTableauToTableau(drag.source.colIdx, cand.colIdx, drag.source.cardIndex);
+        }
+      }
+      if (moved) break;
     }
 
     // If drop failed, cards snap back (just re-render)
@@ -1285,6 +1348,28 @@ class WinAnimation {
     this.particles = [];
     this.running = false;
     this.animFrame = null;
+    this.cardCache = new Map(); // pre-rendered card images
+  }
+
+  // Pre-render all cards to offscreen canvases for fast blitting
+  _cacheCards() {
+    this.cardCache.clear();
+    const r = this.renderer;
+    const dpr = r.dpr;
+    const w = r.cardW;
+    const h = r.cardH;
+
+    for (const p of this.particles) {
+      const key = p.card.id;
+      if (this.cardCache.has(key)) continue;
+      const off = document.createElement('canvas');
+      off.width = w * dpr;
+      off.height = h * dpr;
+      const octx = off.getContext('2d');
+      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      r.drawCardFace(octx, p.card, 0, 0);
+      this.cardCache.set(key, off);
+    }
   }
 
   start() {
@@ -1303,16 +1388,27 @@ class WinAnimation {
         this.particles.push({
           card,
           x, y,
-          vx: (Math.random() - 0.5) * 8,
-          vy: -Math.random() * 6 - 2,
-          gravity: 0.25,
-          bounce: 0.7,
+          vx: (Math.random() - 0.5) * 7,
+          vy: -Math.random() * 5 - 2,
+          gravity: 0.22,
+          bounce: 0.65,
           delay: delay,
-          alpha: 1,
+          settled: false,
         });
-        delay += 60;
+        delay += 55;
       }
     }
+
+    // Pre-render all card images once
+    this._cacheCards();
+
+    // Draw green background once
+    const ctx = this.renderer.ctx;
+    const grad = ctx.createLinearGradient(0, 0, 0, this.renderer.height);
+    grad.addColorStop(0, '#1a7a35');
+    grad.addColorStop(1, '#145524');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, this.renderer.width, this.renderer.height);
 
     this.lastTime = performance.now();
     this.animate();
@@ -1325,25 +1421,24 @@ class WinAnimation {
       this.animFrame = null;
     }
     this.particles = [];
+    this.cardCache.clear();
   }
 
   animate() {
     if (!this.running) return;
 
     const now = performance.now();
-    const dt = Math.min(now - this.lastTime, 32) / 16; // normalize to ~60fps
+    const dt = Math.min((now - this.lastTime) / 16, 3);
     this.lastTime = now;
 
     const ctx = this.renderer.ctx;
     const height = this.renderer.height;
+    const width = this.renderer.width;
     const cardH = this.renderer.cardH;
+    const cardW = this.renderer.cardW;
 
-    // Draw green background
-    const grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, '#1a7a35');
-    grad.addColorStop(1, '#145524');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, this.renderer.width, height);
+    // Don't clear the canvas — cards leave trails naturally!
+    // Classic Windows Solitaire effect
 
     let active = 0;
     for (const p of this.particles) {
@@ -1352,6 +1447,7 @@ class WinAnimation {
         active++;
         continue;
       }
+      if (p.settled) continue;
 
       // Physics
       p.vy += p.gravity * dt;
@@ -1362,26 +1458,24 @@ class WinAnimation {
       if (p.y + cardH > height) {
         p.y = height - cardH;
         p.vy = -Math.abs(p.vy) * p.bounce;
-        p.bounce *= 0.9;
-        // Leave a trail card
-        if (Math.abs(p.vy) > 1) {
-          active++;
+        p.bounce *= 0.88;
+        if (Math.abs(p.vy) < 0.8) {
+          p.settled = true;
+          continue;
         }
       }
 
       // Bounce off sides
-      if (p.x < 0) { p.x = 0; p.vx = Math.abs(p.vx); }
-      if (p.x + this.renderer.cardW > this.renderer.width) {
-        p.x = this.renderer.width - this.renderer.cardW;
-        p.vx = -Math.abs(p.vx);
-      }
+      if (p.x < 0) { p.x = 0; p.vx = Math.abs(p.vx) * 0.9; }
+      if (p.x + cardW > width) { p.x = width - cardW; p.vx = -Math.abs(p.vx) * 0.9; }
 
-      if (p.y < height + 100) {
-        active++;
-        ctx.save();
-        ctx.globalAlpha = p.alpha;
-        this.renderer.drawCardFace(ctx, p.card, p.x, p.y);
-        ctx.restore();
+      active++;
+
+      // Draw using cached card image (very fast!)
+      const cached = this.cardCache.get(p.card.id);
+      if (cached) {
+        ctx.drawImage(cached, 0, 0, cached.width, cached.height,
+                      p.x, p.y, cardW, cardH);
       }
     }
 
