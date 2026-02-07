@@ -1171,6 +1171,7 @@ class UIController {
     if (this.game.startTime && !this.game.won && this.game.moves > 0) {
       this.stats.recordLoss();
     }
+    this._winHandled = false;  // Reset win guard for new game
     this.stopAutoPlay();
     if (this.winAnim) this.winAnim.stop();
     this.game.newGame();
@@ -1312,7 +1313,8 @@ class UIController {
   }
 
   checkWin() {
-    if (this.game.won) {
+    if (this.game.won && !this._winHandled) {
+      this._winHandled = true;  // Prevent duplicate win handling
       this.game.elapsed = Math.floor((Date.now() - this.game.startTime) / 1000);
       this.stopAutoPlay();
       this.stats.recordWin(this.game.elapsed, this.game.moves);
@@ -1586,10 +1588,6 @@ ui.updateButtons();
 
 // Game loop for smooth rendering
 function gameLoop() {
-  // Check win on every frame
-  if (game.won && !document.getElementById('win-overlay').classList.contains('hidden') === false) {
-    ui.checkWin();
-  }
   requestAnimationFrame(gameLoop);
 }
 requestAnimationFrame(gameLoop);
